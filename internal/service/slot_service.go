@@ -59,6 +59,7 @@ func (s *SlotService) HandleRichCommand(b *gotgbot.Bot, ctx *ext.Context) error 
 	}
 	if len(stats) == 0 {
 		ctx.EffectiveMessage.Reply(b, "порожняк", &gotgbot.SendMessageOpts{})
+		return nil
 	}
 
 	var builder strings.Builder
