@@ -12,32 +12,39 @@ import (
 )
 
 type SlotService struct {
-	repo *repository.UserStatsRepo
+	statsRepo    *repository.UserStatsRepo
+	settingsRepo *repository.SettingsRepo
 }
 
-func NewSlotService(repo *repository.UserStatsRepo) *SlotService {
-	return &SlotService{repo: repo}
+func NewSlotService(userRepo *repository.UserStatsRepo, settingsRepo *repository.SettingsRepo) *SlotService {
+	return &SlotService{statsRepo: userRepo, settingsRepo: settingsRepo}
 }
 
 func (s *SlotService) HandleSlot(ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
-	value := msg.Dice.Value
-	var balanceDelta int64
-	var winDelta int64
-	if value == 64 {
-		balanceDelta = 64
-		winDelta = 1
-	} else {
-		balanceDelta = -1
-		winDelta = 0
+	value := int(msg.Dice.Value)
+
+	prizeValues, err := s.settingsRepo.GetPrizeValues(msg.Chat.Id)
+	if err != nil {
+		return err
 	}
-	return s.repo.Spin(msg.Chat.Id, msg.From.Id, msg.From.FirstName, winDelta, balanceDelta)
+
+	var balanceDelta int64 = -1
+	var winDelta int64 = 0
+	for _, v := range prizeValues {
+		if value == v {
+			balanceDelta = 64
+			winDelta = 1
+			break
+		}
+	}
+	return s.statsRepo.Spin(msg.Chat.Id, msg.From.Id, msg.From.FirstName, winDelta, balanceDelta)
 }
 
 func (s *SlotService) HandleMeCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	chatId := ctx.EffectiveMessage.Chat.Id
 	userId := ctx.EffectiveMessage.From.Id
-	stats, err := s.repo.GetPersonalStats(chatId, userId)
+	stats, err := s.statsRepo.GetPersonalStats(chatId, userId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			ctx.EffectiveMessage.Reply(b, "ти хто ваше", &gotgbot.SendMessageOpts{})
@@ -53,7 +60,7 @@ func (s *SlotService) HandleMeCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 
 func (s *SlotService) HandleRichCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	chatId := ctx.EffectiveMessage.Chat.Id
-	stats, err := s.repo.GetRichStats(chatId)
+	stats, err := s.statsRepo.GetRichStats(chatId)
 	if err != nil {
 		return err
 	}
@@ -82,7 +89,7 @@ func (s *SlotService) HandleRichCommand(b *gotgbot.Bot, ctx *ext.Context) error 
 
 func (s *SlotService) HandleDebtorsCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	chatId := ctx.EffectiveMessage.Chat.Id
-	stats, err := s.repo.GetDebtorsStats(chatId)
+	stats, err := s.statsRepo.GetDebtorsStats(chatId)
 	if err != nil {
 		return err
 	}

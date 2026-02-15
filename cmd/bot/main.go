@@ -27,7 +27,7 @@ func main() {
 	userStatsRepo := repository.NewUserStatsRepo(db)
 	settingsRepo := repository.NewSettingsRepo(db)
 
-	slotService := service.NewSlotService(userStatsRepo)
+	slotService := service.NewSlotService(userStatsRepo, settingsRepo)
 	settingsService := service.NewSettingsService(settingsRepo)
 
 	b, err := gotgbot.NewBot(cfg.BotToken, nil)
@@ -49,6 +49,9 @@ func main() {
 	dispatcher.AddHandler(handlers.GetRichCommand(slotService))
 	dispatcher.AddHandler(handlers.GetDebtorsCommand(slotService))
 	dispatcher.AddHandler(handlers.GetSettingsCommand(settingsService))
+	dispatcher.AddHandler(handlers.GetPrizeClassicCommand(settingsService))
+	dispatcher.AddHandler(handlers.GetPrizeThreeInARowCommand(settingsService))
+	dispatcher.AddHandler(handlers.GetPrizeLemonsCommand(settingsService))
 
 	err = updater.StartPolling(b, &ext.PollingOpts{
 		DropPendingUpdates:    false,
