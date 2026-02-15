@@ -25,7 +25,10 @@ func main() {
 	defer db.Close()
 
 	userStatsRepo := repository.NewUserStatsRepo(db)
+	settingsRepo := repository.NewSettingsRepo(db)
+
 	slotService := service.NewSlotService(userStatsRepo)
+	settingsService := service.NewSettingsService(settingsRepo)
 
 	b, err := gotgbot.NewBot(cfg.BotToken, nil)
 	if err != nil {
@@ -45,9 +48,11 @@ func main() {
 	dispatcher.AddHandler(handlers.GetMeCommand(slotService))
 	dispatcher.AddHandler(handlers.GetRichCommand(slotService))
 	dispatcher.AddHandler(handlers.GetDebtorsCommand(slotService))
+	dispatcher.AddHandler(handlers.GetSettingsCommand(settingsService))
 
 	err = updater.StartPolling(b, &ext.PollingOpts{
-		DropPendingUpdates: false,
+		DropPendingUpdates:    false,
+		EnableWebhookDeletion: true,
 	})
 	if err != nil {
 		log.Fatal("failed to start polling:", err.Error())
