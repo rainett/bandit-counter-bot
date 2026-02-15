@@ -19,11 +19,16 @@ if [ -f "$DB_FILE" ]; then
     cp "$DB_FILE" "$BACKUP_FILE"
 fi
 
+echo "Cleaning up old backups..."
+ls -1t "$BACKUP_DIR"/slotbot_*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
+
+
 echo "Updating repository..."
 if [ -d "$DIR/.git" ]; then
   cd "$DIR"
   git fetch --all
   git reset --hard origin/main
+  chmod +x "$DIR/deploy.sh"
 else
   git clone "$REPO" "$DIR"
   cd "$DIR"
