@@ -2,7 +2,7 @@
 
 set -e
 
-REPO="git@github.com:rainett/bandit-counter-bot.git"
+REPO="https://github.com/rainett/bandit-counter-bot.git"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 DB_FILE="$DIR/slotbot.db"
 BACKUP_DIR="$DIR/backups"
