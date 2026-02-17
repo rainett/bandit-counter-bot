@@ -75,7 +75,7 @@ func (s *SlotService) HandleRichCommand(b *gotgbot.Bot, ctx *ext.Context) error 
 	for _, u := range stats {
 		fmt.Fprintf(
 			&builder,
-			"%d️. 👤 %s — 💸 %d, 🎰 %d, 🍾 %d\n",
+			"%d. 👤 %s — 💸 %d, 🎰 %d, 🍾 %d\n",
 			u.Rank,
 			u.Username,
 			u.Balance,
