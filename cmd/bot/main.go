@@ -7,6 +7,9 @@ import (
 	"bandit-counter-bot/internal/service"
 	"database/sql"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -27,7 +30,10 @@ func main() {
 	userStatsRepo := repository.NewUserStatsRepo(db)
 	settingsRepo := repository.NewSettingsRepo(db)
 
-	slotService := service.NewSlotService(userStatsRepo, settingsRepo)
+	slotMessageCache := service.NewSlotMessageCache()
+	_ = slotMessageCache.LoadFromFile("slot_cache.json")
+
+	slotService := service.NewSlotService(userStatsRepo, settingsRepo, slotMessageCache)
 	settingsService := service.NewSettingsService(settingsRepo)
 
 	b, err := gotgbot.NewBot(cfg.BotToken, nil)
@@ -48,10 +54,21 @@ func main() {
 	dispatcher.AddHandler(handlers.GetMeCommand(slotService))
 	dispatcher.AddHandler(handlers.GetRichCommand(slotService))
 	dispatcher.AddHandler(handlers.GetDebtorsCommand(slotService))
+	dispatcher.AddHandler(handlers.GetCleanCommand(slotService))
 	dispatcher.AddHandler(handlers.GetSettingsCommand(settingsService))
 	dispatcher.AddHandler(handlers.GetPrizeClassicCommand(settingsService))
 	dispatcher.AddHandler(handlers.GetPrizeThreeInARowCommand(settingsService))
 	dispatcher.AddHandler(handlers.GetPrizeLemonsCommand(settingsService))
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sig
+		log.Println("saving slot cache...")
+		_ = slotMessageCache.SaveToFile("slot_cache.json")
+		os.Exit(0)
+	}()
 
 	err = updater.StartPolling(b, &ext.PollingOpts{
 		DropPendingUpdates:    false,

@@ -14,10 +14,11 @@ import (
 type SlotService struct {
 	statsRepo    *repository.UserStatsRepo
 	settingsRepo *repository.SettingsRepo
+	messageCache *SlotMessageCache
 }
 
-func NewSlotService(userRepo *repository.UserStatsRepo, settingsRepo *repository.SettingsRepo) *SlotService {
-	return &SlotService{statsRepo: userRepo, settingsRepo: settingsRepo}
+func NewSlotService(userRepo *repository.UserStatsRepo, settingsRepo *repository.SettingsRepo, messageCache *SlotMessageCache) *SlotService {
+	return &SlotService{statsRepo: userRepo, settingsRepo: settingsRepo, messageCache: messageCache}
 }
 
 func (s *SlotService) HandleSlot(ctx *ext.Context) error {
@@ -31,12 +32,17 @@ func (s *SlotService) HandleSlot(ctx *ext.Context) error {
 
 	var balanceDelta int64 = -1
 	var winDelta int64 = 0
+	var win = false
 	for _, v := range prizeValues {
 		if value == v {
 			balanceDelta = 64
 			winDelta = 1
+			win = true
 			break
 		}
+	}
+	if !win {
+		s.messageCache.Add(msg.Chat.Id, msg.MessageId)
 	}
 	return s.statsRepo.Spin(msg.Chat.Id, msg.From.Id, msg.From.FirstName, winDelta, balanceDelta)
 }
@@ -115,5 +121,12 @@ func (s *SlotService) HandleDebtorsCommand(b *gotgbot.Bot, ctx *ext.Context) err
 	}
 
 	ctx.EffectiveMessage.Reply(b, builder.String(), &gotgbot.SendMessageOpts{})
+	return nil
+}
+
+func (s *SlotService) HandleCleanCommand(b *gotgbot.Bot, ctx *ext.Context) error {
+	cleanedMessagesCount := s.messageCache.CleanForChatId(b, ctx.Message.Chat.Id)
+	text := fmt.Sprintf("🧹Очищено повідомлень: %d", cleanedMessagesCount)
+	ctx.EffectiveMessage.Reply(b, text, &gotgbot.SendMessageOpts{})
 	return nil
 }
