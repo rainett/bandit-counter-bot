@@ -126,7 +126,10 @@ func (s *SlotService) HandleDebtorsCommand(b *gotgbot.Bot, ctx *ext.Context) err
 
 func (s *SlotService) HandleCleanCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	cleanedMessagesCount := s.messageCache.CleanForChatId(b, ctx.Message.Chat.Id)
-	text := fmt.Sprintf("🧹Очищено повідомлень: %d", cleanedMessagesCount)
+	var text = "нема шо чистити"
+	if cleanedMessagesCount != 0 {
+		text = fmt.Sprintf("🧹Очищено повідомлень: %d", cleanedMessagesCount)
+	}
 	ctx.EffectiveMessage.Reply(b, text, &gotgbot.SendMessageOpts{})
 	return nil
 }
