@@ -16,12 +16,14 @@ func NewUserStatsRepo(db *sql.DB) *UserStatsRepo {
 
 func (r *UserStatsRepo) Spin(chatId int64, userId int64, username string, winDelta int64, delta int64) error {
 	return r.executeUpdate(`
-		INSERT OR IGNORE INTO user_stats (chat_id, user_id, username) VALUES (?, ?, ?);
-		UPDATE user_stats SET spins = spins + 1, wins = wins + ?, balance = balance + ?
-		WHERE chat_id = ? AND user_id = ?`,
-		chatId, userId, username,
-		winDelta, delta,
-		chatId, userId,
+		INSERT INTO user_stats (chat_id, user_id, username, spins, wins, balance)
+		VALUES (?, ?, ?, 1, ?, ?)
+		ON CONFLICT(chat_id, user_id) DO UPDATE SET
+			username = excluded.username,
+			spins = spins + 1,
+			wins = wins + excluded.wins,
+			balance = balance + excluded.balance`,
+		chatId, userId, username, winDelta, delta,
 	)
 }
 
