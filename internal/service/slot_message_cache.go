@@ -73,10 +73,10 @@ func (c *SlotMessageCache) clearOldCache(now int64) {
 }
 
 func (c *SlotMessageCache) CleanForChatId(b *gotgbot.Bot, chatId int64) int {
-	c.clearOldCache(time.Now().Unix())
 	var toDelete []int64
 
 	c.mu.Lock()
+	c.clearOldCache(time.Now().Unix())
 	messages, ok := c.cache[chatId]
 	if ok {
 		toDelete = make([]int64, 0, len(messages))
