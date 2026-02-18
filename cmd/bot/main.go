@@ -5,6 +5,7 @@ import (
 	"bandit-counter-bot/internal/handlers"
 	"bandit-counter-bot/internal/repository"
 	"bandit-counter-bot/internal/service"
+	"bandit-counter-bot/migrations"
 	"database/sql"
 	"log"
 	"os"
@@ -22,7 +23,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := repository.Migrate(db); err != nil {
+	db.SetMaxOpenConns(1)
+	if err := repository.Migrate(db, migrations.FS); err != nil {
 		log.Fatal("db migration failed:", err)
 	}
 	defer db.Close()
