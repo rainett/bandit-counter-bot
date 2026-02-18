@@ -25,6 +25,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 					spins INTEGER NOT NULL DEFAULT 0,
 					wins INTEGER NOT NULL DEFAULT 0,
 					balance INTEGER NOT NULL DEFAULT 0,
+					current_streak INTEGER NOT NULL DEFAULT 0,
+					max_streak INTEGER NOT NULL DEFAULT 0,
 					PRIMARY KEY (chat_id, user_id)
 				);
 				CREATE INDEX IF NOT EXISTS user_stats_chat_balance_idx
@@ -44,7 +46,7 @@ func TestSpin_NewUser(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	err := repo.Spin(100, 1, "alice", 0, -1)
+	err := repo.Spin(100, 1, "alice", false, 64)
 	if err != nil {
 		t.Fatalf("Spin() error = %v", err)
 	}
@@ -69,7 +71,7 @@ func TestSpin_Win(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	err := repo.Spin(100, 1, "alice", 1, 64)
+	err := repo.Spin(100, 1, "alice", true, 64)
 	if err != nil {
 		t.Fatalf("Spin() error = %v", err)
 	}
@@ -91,8 +93,8 @@ func TestSpin_UpdatesUsername(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "old_name", 0, -1)
-	repo.Spin(100, 1, "new_name", 0, -1)
+	repo.Spin(100, 1, "old_name", false, 64)
+	repo.Spin(100, 1, "new_name", false, 64)
 
 	stats, err := repo.GetRichStats(100)
 	if err != nil {
@@ -111,9 +113,9 @@ func TestSpin_AccumulatesStats(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "alice", 0, -1) // loss
-	repo.Spin(100, 1, "alice", 0, -1) // loss
-	repo.Spin(100, 1, "alice", 1, 64) // win
+	repo.Spin(100, 1, "alice", false, 64) // loss: -1
+	repo.Spin(100, 1, "alice", false, 64) // loss: -1
+	repo.Spin(100, 1, "alice", true, 64)  // win: +64
 
 	stats, err := repo.GetPersonalStats(100, 1)
 	if err != nil {
@@ -146,10 +148,10 @@ func TestGetPersonalStats_Rank(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "rich", 1, 64)  // balance: 64
-	repo.Spin(100, 2, "mid", 0, -1)   // balance: -1
-	repo.Spin(100, 3, "poor", 0, -1)  // balance: -1
-	repo.Spin(100, 3, "poor", 0, -1)  // balance: -2
+	repo.Spin(100, 1, "rich", true, 64)   // balance: 64
+	repo.Spin(100, 2, "mid", false, 64)   // balance: -1
+	repo.Spin(100, 3, "poor", false, 64)  // balance: -1
+	repo.Spin(100, 3, "poor", false, 64)  // balance: -2
 
 	stats, _ := repo.GetPersonalStats(100, 1)
 	if stats.Rank != 1 {
@@ -172,8 +174,8 @@ func TestGetRichStats(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "alice", 1, 64) // balance: 64
-	repo.Spin(100, 2, "bob", 0, -1)   // balance: -1
+	repo.Spin(100, 1, "alice", true, 64)  // balance: 64
+	repo.Spin(100, 2, "bob", false, 64)   // balance: -1
 
 	stats, err := repo.GetRichStats(100)
 	if err != nil {
@@ -198,8 +200,8 @@ func TestGetDebtorsStats(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "alice", 1, 64) // balance: 64
-	repo.Spin(100, 2, "bob", 0, -1)   // balance: -1
+	repo.Spin(100, 1, "alice", true, 64)  // balance: 64
+	repo.Spin(100, 2, "bob", false, 64)   // balance: -1
 
 	stats, err := repo.GetDebtorsStats(100)
 	if err != nil {
@@ -236,8 +238,8 @@ func TestChatIsolation(t *testing.T) {
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "alice", 1, 64)
-	repo.Spin(200, 1, "alice", 0, -1)
+	repo.Spin(100, 1, "alice", true, 64)
+	repo.Spin(200, 1, "alice", false, 64)
 
 	stats100, _ := repo.GetPersonalStats(100, 1)
 	stats200, _ := repo.GetPersonalStats(200, 1)
@@ -247,5 +249,55 @@ func TestChatIsolation(t *testing.T) {
 	}
 	if stats200.Balance != -1 {
 		t.Errorf("chat 200 balance = %d, want -1", stats200.Balance)
+	}
+}
+
+func TestSpin_StreakTracking(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserStatsRepo(db)
+
+	repo.Spin(100, 1, "alice", true, 64)  // streak: 1
+	repo.Spin(100, 1, "alice", true, 64)  // streak: 2
+	repo.Spin(100, 1, "alice", true, 64)  // streak: 3
+
+	stats, _ := repo.GetPersonalStats(100, 1)
+	if stats.CurrentStreak != 3 {
+		t.Errorf("CurrentStreak = %d, want 3", stats.CurrentStreak)
+	}
+	if stats.MaxStreak != 3 {
+		t.Errorf("MaxStreak = %d, want 3", stats.MaxStreak)
+	}
+
+	repo.Spin(100, 1, "alice", false, 64) // loss resets current streak
+
+	stats, _ = repo.GetPersonalStats(100, 1)
+	if stats.CurrentStreak != 0 {
+		t.Errorf("CurrentStreak after loss = %d, want 0", stats.CurrentStreak)
+	}
+	if stats.MaxStreak != 3 {
+		t.Errorf("MaxStreak should remain 3, got %d", stats.MaxStreak)
+	}
+}
+
+func TestResetChat(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserStatsRepo(db)
+
+	repo.Spin(100, 1, "alice", true, 64)
+	repo.Spin(100, 2, "bob", false, 64)
+
+	err := repo.ResetChat(100)
+	if err != nil {
+		t.Fatalf("ResetChat() error = %v", err)
+	}
+
+	stats, err := repo.GetRichStats(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats) != 0 {
+		t.Errorf("expected 0 users after reset, got %d", len(stats))
 	}
 }
