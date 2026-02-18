@@ -40,11 +40,28 @@ func (s *SettingsService) HandlePrizeLemonsCommand(b *gotgbot.Bot, ctx *ext.Cont
 }
 
 func (s *SettingsService) updatePrize(values string, b *gotgbot.Bot, ctx *ext.Context) error {
-	chatId := ctx.EffectiveMessage.Chat.Id
-	err := s.repo.UpdatePrizeValues(values, chatId)
+	msg := ctx.EffectiveMessage
+
+	if msg.Chat.Type == "private" {
+		msg.Reply(b, "налаштування працюють тільки в групах", &gotgbot.SendMessageOpts{})
+		return nil
+	}
+
+	member, err := b.GetChatMember(msg.Chat.Id, msg.From.Id, nil)
 	if err != nil {
 		return err
 	}
-	ctx.EffectiveMessage.Reply(b, "Оновлено умову виграшу", &gotgbot.SendMessageOpts{})
+
+	status := member.GetStatus()
+	if status != "creator" && status != "administrator" {
+		msg.Reply(b, "тільки адміни можуть змінювати налаштування", &gotgbot.SendMessageOpts{})
+		return nil
+	}
+
+	chatId := msg.Chat.Id
+	if err := s.repo.UpdatePrizeValues(values, chatId); err != nil {
+		return err
+	}
+	msg.Reply(b, "Оновлено умову виграшу", &gotgbot.SendMessageOpts{})
 	return nil
 }
