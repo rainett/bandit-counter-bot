@@ -10,15 +10,19 @@ import (
 
 type ResetService struct {
 	statsRepo *repository.UserStatsRepo
+	auth      *AuthService
 }
 
-func NewResetService(statsRepo *repository.UserStatsRepo) *ResetService {
-	return &ResetService{statsRepo: statsRepo}
+func NewResetService(statsRepo *repository.UserStatsRepo, auth *AuthService) *ResetService {
+	return &ResetService{statsRepo: statsRepo, auth: auth}
 }
 
 func (s *ResetService) HandleResetCommand(b *gotgbot.Bot, ctx *ext.Context) error {
-	if !s.isAdmin(b, ctx.EffectiveMessage.Chat.Id, ctx.EffectiveMessage.From.Id) {
-		_, _ = ctx.EffectiveMessage.Reply(b, "Тільки адміни можуть скидати статистику", &gotgbot.SendMessageOpts{})
+	chatId := ctx.EffectiveMessage.Chat.Id
+	userId := ctx.EffectiveMessage.From.Id
+
+	if !s.auth.CanPerform(b, chatId, userId, "reset") {
+		_, _ = ctx.EffectiveMessage.Reply(b, "У тебе немає доступу до скидання статистики", &gotgbot.SendMessageOpts{})
 		return nil
 	}
 
@@ -39,10 +43,11 @@ func (s *ResetService) HandleResetCommand(b *gotgbot.Bot, ctx *ext.Context) erro
 func (s *ResetService) HandleResetCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 	cb := ctx.CallbackQuery
 	chatId := cb.Message.GetChat().Id
+	userId := cb.From.Id
 
-	if !s.isAdmin(b, chatId, cb.From.Id) {
+	if !s.auth.CanPerform(b, chatId, userId, "reset") {
 		cb.Answer(b, &gotgbot.AnswerCallbackQueryOpts{
-			Text: "Тільки адміни можуть це робити",
+			Text: "У тебе немає доступу до скидання статистики",
 		})
 		return nil
 	}
@@ -94,13 +99,4 @@ func (s *ResetService) HandleResetCallback(b *gotgbot.Bot, ctx *ext.Context) err
 
 	cb.Answer(b, nil)
 	return nil
-}
-
-func (s *ResetService) isAdmin(b *gotgbot.Bot, chatId int64, userId int64) bool {
-	member, err := b.GetChatMember(chatId, userId, nil)
-	if err != nil {
-		return false
-	}
-	status := member.GetStatus()
-	return status == "creator" || status == "administrator"
 }

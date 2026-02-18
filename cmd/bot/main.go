@@ -38,10 +38,11 @@ func main() {
 	slotMessageCache := service.NewSlotMessageCache()
 	_ = slotMessageCache.LoadFromFile("slot_cache.json")
 
+	authService := service.NewAuthService(cfg.DevIDs, settingsRepo)
 	slotService := service.NewSlotService(userStatsRepo, settingsRepo, slotMessageCache)
-	settingsService := service.NewSettingsService(settingsRepo)
+	settingsService := service.NewSettingsService(settingsRepo, authService)
 	statsService := service.NewStatsService(userStatsRepo)
-	resetService := service.NewResetService(userStatsRepo)
+	resetService := service.NewResetService(userStatsRepo, authService)
 
 	b, err := gotgbot.NewBot(cfg.BotToken, nil)
 	if err != nil {

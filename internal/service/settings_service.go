@@ -24,15 +24,18 @@ var winAmounts = []int64{32, 64, 128, 256}
 
 type SettingsService struct {
 	repo *repository.SettingsRepo
+	auth *AuthService
 }
 
-func NewSettingsService(repo *repository.SettingsRepo) *SettingsService {
-	return &SettingsService{repo: repo}
+func NewSettingsService(repo *repository.SettingsRepo, auth *AuthService) *SettingsService {
+	return &SettingsService{repo: repo, auth: auth}
 }
 
 func (s *SettingsService) HandleSettingsCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	chatId := ctx.EffectiveMessage.Chat.Id
-	text, keyboard, err := s.buildSettingsMessage(chatId)
+	userId := ctx.EffectiveMessage.From.Id
+	isAdmin := s.auth.IsAdmin(b, chatId, userId)
+	text, keyboard, err := s.buildSettingsMessage(chatId, isAdmin)
 	if err != nil {
 		return err
 	}
@@ -51,33 +54,59 @@ func (s *SettingsService) HandleSettingsCallback(b *gotgbot.Bot, ctx *ext.Contex
 	}
 
 	chatId := cb.Message.GetChat().Id
+	userId := cb.From.Id
 	category := parts[1]
 	value := parts[2]
 
 	switch category {
-	case "prize":
-		for _, mode := range prizeModes {
-			if mode.key == value {
-				if err := s.repo.UpdatePrizeValues(mode.values, chatId); err != nil {
-					cb.Answer(b, nil)
-					return err
-				}
-				break
-			}
-		}
-	case "amount":
-		amount, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			cb.Answer(b, nil)
+	case "prize", "amount":
+		if !s.auth.CanPerform(b, chatId, userId, "settings") {
+			cb.Answer(b, &gotgbot.AnswerCallbackQueryOpts{
+				Text: "У тебе немає доступу до налаштувань",
+			})
 			return nil
 		}
-		if err := s.repo.UpdateWinAmount(amount, chatId); err != nil {
+		if category == "prize" {
+			for _, mode := range prizeModes {
+				if mode.key == value {
+					if err := s.repo.UpdatePrizeValues(mode.values, chatId); err != nil {
+						cb.Answer(b, nil)
+						return err
+					}
+					break
+				}
+			}
+		} else {
+			amount, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				cb.Answer(b, nil)
+				return nil
+			}
+			if err := s.repo.UpdateWinAmount(amount, chatId); err != nil {
+				cb.Answer(b, nil)
+				return err
+			}
+		}
+
+	case "perm":
+		if !s.auth.IsAdmin(b, chatId, userId) {
+			cb.Answer(b, &gotgbot.AnswerCallbackQueryOpts{
+				Text: "Тільки адміни можуть змінювати дозволи",
+			})
+			return nil
+		}
+		if _, err := s.repo.TogglePermission(chatId, value); err != nil {
 			cb.Answer(b, nil)
 			return err
 		}
+
+	default:
+		cb.Answer(b, nil)
+		return nil
 	}
 
-	text, keyboard, err := s.buildSettingsMessage(chatId)
+	isAdmin := s.auth.IsAdmin(b, chatId, userId)
+	text, keyboard, err := s.buildSettingsMessage(chatId, isAdmin)
 	if err != nil {
 		cb.Answer(b, nil)
 		return err
@@ -90,7 +119,7 @@ func (s *SettingsService) HandleSettingsCallback(b *gotgbot.Bot, ctx *ext.Contex
 	return nil
 }
 
-func (s *SettingsService) buildSettingsMessage(chatId int64) (string, gotgbot.InlineKeyboardMarkup, error) {
+func (s *SettingsService) buildSettingsMessage(chatId int64, isAdmin bool) (string, gotgbot.InlineKeyboardMarkup, error) {
 	currentMode, err := s.repo.GetPrizeMode(chatId)
 	if err != nil {
 		return "", gotgbot.InlineKeyboardMarkup{}, err
@@ -108,7 +137,8 @@ func (s *SettingsService) buildSettingsMessage(chatId int64) (string, gotgbot.In
 		}
 	}
 
-	text := fmt.Sprintf("🎰 Налаштування крутілки\n\nРежим виграшу: %s\nСума виграшу: %d", modeLabel, currentAmount)
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "🎰 Налаштування крутілки\n\nРежим виграшу: %s\nСума виграшу: %d", modeLabel, currentAmount)
 
 	var prizeButtons []gotgbot.InlineKeyboardButton
 	for _, m := range prizeModes {
@@ -134,12 +164,41 @@ func (s *SettingsService) buildSettingsMessage(chatId int64) (string, gotgbot.In
 		})
 	}
 
-	keyboard := gotgbot.InlineKeyboardMarkup{
-		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-			prizeButtons,
-			amountButtons,
-		},
+	rows := [][]gotgbot.InlineKeyboardButton{
+		prizeButtons,
+		amountButtons,
 	}
 
-	return text, keyboard, nil
+	if isAdmin {
+		allowSettings, _ := s.repo.GetPermission(chatId, "settings")
+		allowReset, _ := s.repo.GetPermission(chatId, "reset")
+
+		settingsLabel := "🔒 Налаштування"
+		if allowSettings {
+			settingsLabel = "🔓 Налаштування"
+		}
+		resetLabel := "🔒 Скидання"
+		if allowReset {
+			resetLabel = "🔓 Скидання"
+		}
+
+		settingsStatus := "адміни"
+		if allowSettings {
+			settingsStatus = "всі"
+		}
+		resetStatus := "адміни"
+		if allowReset {
+			resetStatus = "всі"
+		}
+
+		fmt.Fprintf(&builder, "\n\n🔐 Дозволи\nНалаштування: %s | Скидання: %s", settingsStatus, resetStatus)
+
+		rows = append(rows, []gotgbot.InlineKeyboardButton{
+			{Text: settingsLabel, CallbackData: "settings:perm:settings"},
+			{Text: resetLabel, CallbackData: "settings:perm:reset"},
+		})
+	}
+
+	keyboard := gotgbot.InlineKeyboardMarkup{InlineKeyboard: rows}
+	return builder.String(), keyboard, nil
 }

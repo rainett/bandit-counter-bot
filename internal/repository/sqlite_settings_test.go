@@ -20,7 +20,10 @@ func setupSettingsDB(t *testing.T) *sql.DB {
 			Data: []byte(`
 				CREATE TABLE IF NOT EXISTS chat_settings(
 					chat_id INTEGER PRIMARY KEY,
-					prize_values TEXT NOT NULL DEFAULT '[64]'
+					prize_values TEXT NOT NULL DEFAULT '[64]',
+					win_amount INTEGER NOT NULL DEFAULT 64,
+					allow_user_settings INTEGER NOT NULL DEFAULT 0,
+					allow_user_reset INTEGER NOT NULL DEFAULT 0
 				);
 			`),
 		},
@@ -139,5 +142,91 @@ func TestPrizeValues_ChatIsolation(t *testing.T) {
 	}
 	if len(v200) != 4 {
 		t.Errorf("chat 200 values = %v, want [1,22,43,64]", v200)
+	}
+}
+
+func TestGetPermission_DefaultFalse(t *testing.T) {
+	db := setupSettingsDB(t)
+	defer db.Close()
+	repo := NewSettingsRepo(db)
+
+	allowed, err := repo.GetPermission(100, "settings")
+	if err != nil {
+		t.Fatalf("GetPermission() error = %v", err)
+	}
+	if allowed {
+		t.Error("expected default permission to be false")
+	}
+}
+
+func TestTogglePermission(t *testing.T) {
+	db := setupSettingsDB(t)
+	defer db.Close()
+	repo := NewSettingsRepo(db)
+
+	result, err := repo.TogglePermission(100, "settings")
+	if err != nil {
+		t.Fatalf("TogglePermission() error = %v", err)
+	}
+	if !result {
+		t.Error("expected permission to be true after toggle on")
+	}
+
+	result, err = repo.TogglePermission(100, "settings")
+	if err != nil {
+		t.Fatalf("TogglePermission() error = %v", err)
+	}
+	if result {
+		t.Error("expected permission to be false after toggle off")
+	}
+}
+
+func TestTogglePermission_Independent(t *testing.T) {
+	db := setupSettingsDB(t)
+	defer db.Close()
+	repo := NewSettingsRepo(db)
+
+	repo.TogglePermission(100, "settings")
+
+	allowSettings, _ := repo.GetPermission(100, "settings")
+	allowReset, _ := repo.GetPermission(100, "reset")
+
+	if !allowSettings {
+		t.Error("settings permission should be true")
+	}
+	if allowReset {
+		t.Error("reset permission should still be false")
+	}
+}
+
+func TestGetPermission_InvalidAction(t *testing.T) {
+	db := setupSettingsDB(t)
+	defer db.Close()
+	repo := NewSettingsRepo(db)
+
+	allowed, err := repo.GetPermission(100, "invalid")
+	if err != nil {
+		t.Fatalf("GetPermission() error = %v", err)
+	}
+	if allowed {
+		t.Error("invalid action should return false")
+	}
+}
+
+func TestTogglePermission_ChatIsolation(t *testing.T) {
+	db := setupSettingsDB(t)
+	defer db.Close()
+	repo := NewSettingsRepo(db)
+
+	repo.TogglePermission(100, "settings")
+
+	allow100, _ := repo.GetPermission(100, "settings")
+	allow200, _ := repo.GetPermission(200, "settings")
+
+	if !allow100 {
+		t.Error("chat 100 should have settings allowed")
+	}
+	if allow200 {
+		t.Error("chat 200 should not have settings allowed")
 	}
 }
