@@ -27,6 +27,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 					balance INTEGER NOT NULL DEFAULT 0,
 					current_streak INTEGER NOT NULL DEFAULT 0,
 					max_streak INTEGER NOT NULL DEFAULT 0,
+					current_loss_streak INTEGER NOT NULL DEFAULT 0,
+					max_loss_streak INTEGER NOT NULL DEFAULT 0,
 					PRIMARY KEY (chat_id, user_id)
 				);
 				CREATE INDEX IF NOT EXISTS user_stats_chat_balance_idx
@@ -252,14 +254,14 @@ func TestChatIsolation(t *testing.T) {
 	}
 }
 
-func TestSpin_StreakTracking(t *testing.T) {
+func TestSpin_WinStreakTracking(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	repo := NewUserStatsRepo(db)
 
-	repo.Spin(100, 1, "alice", true, 64)  // streak: 1
-	repo.Spin(100, 1, "alice", true, 64)  // streak: 2
-	repo.Spin(100, 1, "alice", true, 64)  // streak: 3
+	repo.Spin(100, 1, "alice", true, 64) // win streak: 1
+	repo.Spin(100, 1, "alice", true, 64) // win streak: 2
+	repo.Spin(100, 1, "alice", true, 64) // win streak: 3
 
 	stats, _ := repo.GetPersonalStats(100, 1)
 	if stats.CurrentStreak != 3 {
@@ -269,7 +271,7 @@ func TestSpin_StreakTracking(t *testing.T) {
 		t.Errorf("MaxStreak = %d, want 3", stats.MaxStreak)
 	}
 
-	repo.Spin(100, 1, "alice", false, 64) // loss resets current streak
+	repo.Spin(100, 1, "alice", false, 64) // loss resets win streak
 
 	stats, _ = repo.GetPersonalStats(100, 1)
 	if stats.CurrentStreak != 0 {
@@ -277,6 +279,35 @@ func TestSpin_StreakTracking(t *testing.T) {
 	}
 	if stats.MaxStreak != 3 {
 		t.Errorf("MaxStreak should remain 3, got %d", stats.MaxStreak)
+	}
+}
+
+func TestSpin_LossStreakTracking(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewUserStatsRepo(db)
+
+	repo.Spin(100, 1, "alice", false, 64) // loss streak: 1
+	repo.Spin(100, 1, "alice", false, 64) // loss streak: 2
+	repo.Spin(100, 1, "alice", false, 64) // loss streak: 3
+	repo.Spin(100, 1, "alice", false, 64) // loss streak: 4
+
+	stats, _ := repo.GetPersonalStats(100, 1)
+	if stats.CurrentLossStreak != 4 {
+		t.Errorf("CurrentLossStreak = %d, want 4", stats.CurrentLossStreak)
+	}
+	if stats.MaxLossStreak != 4 {
+		t.Errorf("MaxLossStreak = %d, want 4", stats.MaxLossStreak)
+	}
+
+	repo.Spin(100, 1, "alice", true, 64) // win resets loss streak
+
+	stats, _ = repo.GetPersonalStats(100, 1)
+	if stats.CurrentLossStreak != 0 {
+		t.Errorf("CurrentLossStreak after win = %d, want 0", stats.CurrentLossStreak)
+	}
+	if stats.MaxLossStreak != 4 {
+		t.Errorf("MaxLossStreak should remain 4, got %d", stats.MaxLossStreak)
 	}
 }
 

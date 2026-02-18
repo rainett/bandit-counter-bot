@@ -29,17 +29,21 @@ func (r *UserStatsRepo) Spin(chatId int64, userId int64, username string, win bo
 	}
 
 	return r.executeUpdate(`
-		INSERT INTO user_stats (chat_id, user_id, username, spins, wins, balance, current_streak, max_streak)
-		VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+		INSERT INTO user_stats (chat_id, user_id, username, spins, wins, balance,
+			current_streak, max_streak, current_loss_streak, max_loss_streak)
+		VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(chat_id, user_id) DO UPDATE SET
 			username = excluded.username,
 			spins = spins + 1,
 			wins = wins + excluded.wins,
 			balance = balance + excluded.balance,
 			current_streak = CASE WHEN ? = 1 THEN current_streak + 1 ELSE 0 END,
-			max_streak = CASE WHEN ? = 1 THEN MAX(max_streak, current_streak + 1) ELSE max_streak END`,
-		chatId, userId, username, winDelta, balanceDelta, winFlag, winFlag,
-		winFlag, winFlag,
+			max_streak = CASE WHEN ? = 1 THEN MAX(max_streak, current_streak + 1) ELSE max_streak END,
+			current_loss_streak = CASE WHEN ? = 0 THEN current_loss_streak + 1 ELSE 0 END,
+			max_loss_streak = CASE WHEN ? = 0 THEN MAX(max_loss_streak, current_loss_streak + 1) ELSE max_loss_streak END`,
+		chatId, userId, username, winDelta, balanceDelta,
+		winFlag, winFlag, 1-winFlag, 1-winFlag,
+		winFlag, winFlag, winFlag, winFlag,
 	)
 }
 
@@ -47,14 +51,17 @@ func (r *UserStatsRepo) GetPersonalStats(chatId int64, userId int64) (domain.Per
 	var stats domain.PersonalStats
 	err := r.db.QueryRow(`
 		WITH ranked AS (
-			SELECT user_id, spins, wins, balance, current_streak, max_streak,
+			SELECT user_id, spins, wins, balance,
+			       current_streak, max_streak, current_loss_streak, max_loss_streak,
 			       DENSE_RANK() OVER (ORDER BY balance DESC) AS rank
 			FROM user_stats WHERE chat_id = ?
 		)
-		SELECT spins, wins, balance, current_streak, max_streak, rank
+		SELECT spins, wins, balance, current_streak, max_streak,
+		       current_loss_streak, max_loss_streak, rank
 		FROM ranked WHERE user_id = ?`,
 		chatId, userId).Scan(&stats.Spins, &stats.Wins, &stats.Balance,
-		&stats.CurrentStreak, &stats.MaxStreak, &stats.Rank)
+		&stats.CurrentStreak, &stats.MaxStreak,
+		&stats.CurrentLossStreak, &stats.MaxLossStreak, &stats.Rank)
 	if err != nil {
 		return stats, err
 	}
@@ -145,7 +152,7 @@ func (r *UserStatsRepo) GetLuckyStats(chatId int64) ([]domain.RatingStats, error
 
 func (r *UserStatsRepo) GetStreakStats(chatId int64) ([]domain.RatingStats, error) {
 	rows, err := r.db.Query(`
-		SELECT username, spins, wins, max_streak,
+		SELECT username, spins, wins, max_streak, max_loss_streak,
 		       DENSE_RANK() OVER (ORDER BY max_streak DESC) AS rank
 		FROM user_stats
 		WHERE chat_id = ?
@@ -158,7 +165,7 @@ func (r *UserStatsRepo) GetStreakStats(chatId int64) ([]domain.RatingStats, erro
 	var res []domain.RatingStats
 	for rows.Next() {
 		var s domain.RatingStats
-		if err := rows.Scan(&s.Username, &s.Spins, &s.Wins, &s.MaxStreak, &s.Rank); err != nil {
+		if err := rows.Scan(&s.Username, &s.Spins, &s.Wins, &s.MaxStreak, &s.MaxLossStreak, &s.Rank); err != nil {
 			return nil, err
 		}
 		res = append(res, s)

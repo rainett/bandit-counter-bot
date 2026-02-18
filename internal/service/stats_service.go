@@ -119,8 +119,8 @@ func (s *StatsService) buildStatsMessage(chatId int64, view string, page int) (s
 				fmt.Fprintf(&builder, "%d. 👤 %s — 🍀 %.1f%%, 🎰 %d, 🍾 %d\n",
 					u.Rank, u.Username, u.Luck, u.Spins, u.Wins)
 			case "streaks":
-				fmt.Fprintf(&builder, "%d. 👤 %s — 🔥 %d, 🎰 %d, 🍾 %d\n",
-					u.Rank, u.Username, u.MaxStreak, u.Spins, u.Wins)
+				fmt.Fprintf(&builder, "%d. 👤 %s — 🔥 %d, 💀 %d, 🎰 %d\n",
+					u.Rank, u.Username, u.MaxStreak, u.MaxLossStreak, u.Spins)
 			default:
 				fmt.Fprintf(&builder, "%d. 👤 %s — 💸 %d, 🎰 %d, 🍾 %d\n",
 					u.Rank, u.Username, u.Balance, u.Spins, u.Wins)
@@ -137,29 +137,29 @@ func (s *StatsService) buildStatsMessage(chatId int64, view string, page int) (s
 }
 
 func buildStatsKeyboard(activeView string, page, totalPages int) gotgbot.InlineKeyboardMarkup {
-	views := []struct {
+	viewRows := [][]struct {
 		key   string
 		label string
 	}{
-		{"rich", "Багатії"},
-		{"debtors", "Боржники"},
-		{"lucky", "Удачливі"},
-		{"streaks", "Серії"},
+		{{"rich", "Багатії"}, {"debtors", "Боржники"}},
+		{{"lucky", "Удачливі"}, {"streaks", "Серії"}},
 	}
 
-	var viewButtons []gotgbot.InlineKeyboardButton
-	for _, v := range views {
-		label := v.label
-		if v.key == activeView {
-			label = "✅ " + label
+	var rows [][]gotgbot.InlineKeyboardButton
+	for _, row := range viewRows {
+		var buttons []gotgbot.InlineKeyboardButton
+		for _, v := range row {
+			label := v.label
+			if v.key == activeView {
+				label = "✅ " + label
+			}
+			buttons = append(buttons, gotgbot.InlineKeyboardButton{
+				Text:         label,
+				CallbackData: fmt.Sprintf("stats:%s:0", v.key),
+			})
 		}
-		viewButtons = append(viewButtons, gotgbot.InlineKeyboardButton{
-			Text:         label,
-			CallbackData: fmt.Sprintf("stats:%s:0", v.key),
-		})
+		rows = append(rows, buttons)
 	}
-
-	rows := [][]gotgbot.InlineKeyboardButton{viewButtons}
 
 	if totalPages > 1 {
 		var navButtons []gotgbot.InlineKeyboardButton

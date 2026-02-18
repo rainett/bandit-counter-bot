@@ -73,8 +73,9 @@ func (s *SlotService) HandleMeCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 	text := fmt.Sprintf(
-		"🎰 Прокрутів: %d\n🍾 Виграшів: %d\n💸 Баланс: %d\n⭐ Місце в чаті: %d\n🍀 Удача: %.1f%%\n🔥 Поточна серія: %d\n🏆 Макс серія: %d",
-		stats.Spins, stats.Wins, stats.Balance, stats.Rank, stats.Luck, stats.CurrentStreak, stats.MaxStreak)
+		"🎰 Прокрутів: %d\n🍾 Виграшів: %d\n💸 Баланс: %d\n⭐ Місце в чаті: %d\n🍀 Удача: %.1f%%\n🔥 Серія перемог: %d / макс %d\n💀 Серія поразок: %d / макс %d",
+		stats.Spins, stats.Wins, stats.Balance, stats.Rank, stats.Luck,
+		stats.CurrentStreak, stats.MaxStreak, stats.CurrentLossStreak, stats.MaxLossStreak)
 	_, _ = ctx.EffectiveMessage.Reply(b, text, &gotgbot.SendMessageOpts{})
 	return nil
 }

@@ -1,0 +1,2 @@
+ALTER TABLE user_stats ADD COLUMN current_loss_streak INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user_stats ADD COLUMN max_loss_streak INTEGER NOT NULL DEFAULT 0;
