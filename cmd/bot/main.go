@@ -11,11 +11,17 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	tghandlers "github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	db, err := sql.Open("sqlite3", cfg.DBPath)
 	if err != nil {
 		log.Fatal(err)
@@ -34,6 +40,8 @@ func main() {
 
 	slotService := service.NewSlotService(userStatsRepo, settingsRepo, slotMessageCache)
 	settingsService := service.NewSettingsService(settingsRepo)
+	statsService := service.NewStatsService(userStatsRepo)
+	resetService := service.NewResetService(userStatsRepo)
 
 	b, err := gotgbot.NewBot(cfg.BotToken, nil)
 	if err != nil {
@@ -50,14 +58,15 @@ func main() {
 	updater := ext.NewUpdater(dispatcher, &ext.UpdaterOpts{})
 
 	dispatcher.AddHandler(handlers.GetSlotHandler(slotService))
-	dispatcher.AddHandler(handlers.GetMeCommand(slotService))
-	dispatcher.AddHandler(handlers.GetRichCommand(slotService))
-	dispatcher.AddHandler(handlers.GetDebtorsCommand(slotService))
 	dispatcher.AddHandler(handlers.GetCleanCommand(slotService))
-	dispatcher.AddHandler(handlers.GetSettingsCommand(settingsService))
-	dispatcher.AddHandler(handlers.GetPrizeClassicCommand(settingsService))
-	dispatcher.AddHandler(handlers.GetPrizeThreeInARowCommand(settingsService))
-	dispatcher.AddHandler(handlers.GetPrizeLemonsCommand(settingsService))
+	dispatcher.AddHandler(tghandlers.NewCommand("me", slotService.HandleMeCommand))
+	dispatcher.AddHandler(tghandlers.NewCommand("stats", statsService.HandleStatsCommand))
+	dispatcher.AddHandler(tghandlers.NewCommand("settings", settingsService.HandleSettingsCommand))
+	dispatcher.AddHandler(tghandlers.NewCommand("reset", resetService.HandleResetCommand))
+	dispatcher.AddHandler(tghandlers.NewCommand("help", slotService.HandleHelpCommand))
+	dispatcher.AddHandler(tghandlers.NewCallback(callbackquery.Prefix("stats:"), statsService.HandleStatsCallback))
+	dispatcher.AddHandler(tghandlers.NewCallback(callbackquery.Prefix("settings:"), settingsService.HandleSettingsCallback))
+	dispatcher.AddHandler(tghandlers.NewCallback(callbackquery.Prefix("reset:"), resetService.HandleResetCallback))
 
 	err = updater.StartPolling(b, &ext.PollingOpts{
 		DropPendingUpdates:    false,
@@ -68,7 +77,6 @@ func main() {
 	}
 	log.Println("Bot has been started...", "bot_username", b.User.Username)
 
-	// Idle blocks until SIGINT/SIGTERM and then stops the updater
 	updater.Idle()
 
 	log.Println("shutting down, saving slot cache...")

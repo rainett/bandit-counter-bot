@@ -11,13 +11,13 @@ import (
 
 func GetSlotHandler(slotService *service.SlotService) ext.Handler {
 	return handlers.NewMessage(message.Dice, func(b *gotgbot.Bot, ctx *ext.Context) error {
-		return handleSlot(ctx, slotService)
+		return handleSlot(b, ctx, slotService)
 	})
 }
 
-func handleSlot(ctx *ext.Context, slotService *service.SlotService) error {
+func handleSlot(b *gotgbot.Bot, ctx *ext.Context, slotService *service.SlotService) error {
 	if ctx.EffectiveMessage.Dice.Emoji == "🎰" && ctx.Message.ForwardOrigin == nil {
-		return slotService.HandleSlot(ctx)
+		return slotService.HandleSlot(b, ctx)
 	}
 	return nil
 }
