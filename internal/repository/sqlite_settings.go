@@ -17,9 +17,10 @@ func NewSettingsRepo(db *sql.DB) *SettingsRepo {
 
 func (r *SettingsRepo) UpdatePrizeValues(values string, chatId int64) error {
 	_, err := r.db.Exec(`
-		INSERT OR IGNORE INTO chat_settings (chat_id) VALUES (?);
-		UPDATE chat_settings SET prize_values = ? WHERE chat_id = ?;`,
-		chatId, values, chatId)
+		INSERT INTO chat_settings (chat_id, prize_values)
+		VALUES (?, ?)
+		ON CONFLICT(chat_id) DO UPDATE SET prize_values = excluded.prize_values`,
+		chatId, values)
 	return err
 }
 

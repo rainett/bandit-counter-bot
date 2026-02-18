@@ -11,6 +11,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
 
+const winPrize = 64
+
 type SlotService struct {
 	statsRepo    *repository.UserStatsRepo
 	settingsRepo *repository.SettingsRepo
@@ -35,7 +37,7 @@ func (s *SlotService) HandleSlot(ctx *ext.Context) error {
 	var win = false
 	for _, v := range prizeValues {
 		if value == v {
-			balanceDelta = 64
+			balanceDelta = winPrize
 			winDelta = 1
 			win = true
 			break
