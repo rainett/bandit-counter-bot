@@ -7,9 +7,6 @@ import (
 	"bandit-counter-bot/internal/service"
 	"database/sql"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -60,24 +57,20 @@ func main() {
 	dispatcher.AddHandler(handlers.GetPrizeThreeInARowCommand(settingsService))
 	dispatcher.AddHandler(handlers.GetPrizeLemonsCommand(settingsService))
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sig
-		log.Println("saving slot cache...")
-		_ = slotMessageCache.SaveToFile("slot_cache.json")
-		os.Exit(0)
-	}()
-
 	err = updater.StartPolling(b, &ext.PollingOpts{
 		DropPendingUpdates:    false,
 		EnableWebhookDeletion: true,
 	})
 	if err != nil {
 		log.Fatal("failed to start polling:", err.Error())
-		return
 	}
 	log.Println("Bot has been started...", "bot_username", b.User.Username)
+
+	// Idle blocks until SIGINT/SIGTERM and then stops the updater
 	updater.Idle()
+
+	log.Println("shutting down, saving slot cache...")
+	if err := slotMessageCache.SaveToFile("slot_cache.json"); err != nil {
+		log.Println("failed to save slot cache:", err)
+	}
 }
