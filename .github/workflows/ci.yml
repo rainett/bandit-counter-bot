@@ -25,5 +25,19 @@ jobs:
       - name: Build
         run: go build -o slotbot ./cmd/bot
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install dependencies
+        run: go mod download
+
       - name: Test
-        run: go test ./...
+        run: go test -v -race -count=1 ./...
+        env:
+          CGO_ENABLED: 1
