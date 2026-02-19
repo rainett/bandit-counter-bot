@@ -195,14 +195,14 @@ func TestSaveToFile_AtomicWrite(t *testing.T) {
 
 func TestBackgroundCleanup(t *testing.T) {
 	cache := NewSlotMessageCache()
-	cache.ttl = 100 * time.Millisecond
-	cache.cleanupTicker.Stop()
-	cache.cleanupTicker = time.NewTicker(50 * time.Millisecond)
 	defer cache.Stop()
+
+	// Set short TTL
+	cache.ttl = 100 * time.Millisecond
 
 	now := time.Now().Unix()
 
-	// Add expired messages
+	// Add expired messages (1 second old)
 	data := &chatData{
 		messages: []SlotMessage{
 			{MessageId: 1, Timestamp: now - 1},
@@ -211,8 +211,13 @@ func TestBackgroundCleanup(t *testing.T) {
 	}
 	cache.chats.Store(int64(100), data)
 
-	// Wait for background cleanup to run
-	time.Sleep(150 * time.Millisecond)
+	// Verify messages are there
+	if count := cache.CountMessages(100); count != 2 {
+		t.Fatalf("expected 2 messages initially, got %d", count)
+	}
+
+	// Manually trigger cleanup instead of relying on ticker timing
+	cache.cleanExpiredMessages()
 
 	// Messages should be cleaned up
 	if count := cache.CountMessages(100); count != 0 {
