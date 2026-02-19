@@ -14,48 +14,74 @@ type SlotMessage struct {
 	Timestamp int64
 }
 
+type chatData struct {
+	mu       sync.Mutex
+	messages []SlotMessage
+}
+
 type SlotMessageCache struct {
-	mu         sync.Mutex
-	cache      map[int64][]SlotMessage
-	addCount   uint64
-	cleanEvery uint64
-	ttl        int64
+	chats         sync.Map // map[int64]*chatData
+	ttl           time.Duration
+	cleanupTicker *time.Ticker
+	stopCleanup   chan struct{}
 }
 
 func NewSlotMessageCache() *SlotMessageCache {
-	return &SlotMessageCache{
-		mu:         sync.Mutex{},
-		cache:      make(map[int64][]SlotMessage),
-		cleanEvery: 1000,
-		ttl:        int64(24 * time.Hour / time.Second),
+	c := &SlotMessageCache{
+		chats:       sync.Map{},
+		ttl:         24 * time.Hour,
+		stopCleanup: make(chan struct{}),
 	}
+
+	// Start background cleanup goroutine
+	c.cleanupTicker = time.NewTicker(1 * time.Hour)
+	go c.backgroundCleanup()
+
+	return c
+}
+
+func (c *SlotMessageCache) getChatData(chatId int64) *chatData {
+	val, _ := c.chats.LoadOrStore(chatId, &chatData{
+		messages: make([]SlotMessage, 0),
+	})
+	return val.(*chatData)
 }
 
 func (c *SlotMessageCache) Add(chatId, messageId int64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	data := c.getChatData(chatId)
+
+	data.mu.Lock()
+	defer data.mu.Unlock()
 
 	now := time.Now().Unix()
-	c.cache[chatId] = append(c.cache[chatId], SlotMessage{
+	data.messages = append(data.messages, SlotMessage{
 		MessageId: messageId,
 		Timestamp: now,
 	})
+}
 
-	c.addCount++
-
-	if c.addCount%c.cleanEvery == 0 {
-		c.clearOldCache(now)
+func (c *SlotMessageCache) backgroundCleanup() {
+	for {
+		select {
+		case <-c.cleanupTicker.C:
+			c.cleanExpiredMessages()
+		case <-c.stopCleanup:
+			c.cleanupTicker.Stop()
+			return
+		}
 	}
 }
 
-func (c *SlotMessageCache) clearOldCache(now int64) {
-	cutoff := now - c.ttl
+func (c *SlotMessageCache) cleanExpiredMessages() {
+	now := time.Now().Unix()
+	cutoff := now - int64(c.ttl.Seconds())
 
-	for chatId, messages := range c.cache {
-		if len(messages) == 0 {
-			continue
-		}
+	c.chats.Range(func(key, value interface{}) bool {
+		chatId := key.(int64)
+		data := value.(*chatData)
 
+		data.mu.Lock()
+		messages := data.messages
 		n := 0
 		for _, message := range messages {
 			if message.Timestamp >= cutoff {
@@ -65,27 +91,36 @@ func (c *SlotMessageCache) clearOldCache(now int64) {
 		}
 
 		if n == 0 {
-			delete(c.cache, chatId)
+			data.messages = nil
+			data.mu.Unlock()
+			c.chats.Delete(chatId)
 		} else {
-			c.cache[chatId] = messages[:n]
+			data.messages = messages[:n]
+			data.mu.Unlock()
 		}
-	}
+
+		return true
+	})
 }
 
 func (c *SlotMessageCache) CleanForChatId(b *gotgbot.Bot, chatId int64) int {
-	var toDelete []int64
-
-	c.mu.Lock()
-	c.clearOldCache(time.Now().Unix())
-	messages, ok := c.cache[chatId]
-	if ok {
-		toDelete = make([]int64, 0, len(messages))
-		for _, m := range messages {
-			toDelete = append(toDelete, m.MessageId)
-		}
-		delete(c.cache, chatId)
+	val, ok := c.chats.Load(chatId)
+	if !ok {
+		return 0
 	}
-	c.mu.Unlock()
+
+	data := val.(*chatData)
+
+	data.mu.Lock()
+	toDelete := make([]int64, len(data.messages))
+	for i, m := range data.messages {
+		toDelete[i] = m.MessageId
+	}
+	data.messages = nil
+	data.mu.Unlock()
+
+	// Remove chat entry from map
+	c.chats.Delete(chatId)
 
 	if len(toDelete) == 0 {
 		return 0
@@ -111,17 +146,38 @@ func (c *SlotMessageCache) CleanForChatId(b *gotgbot.Bot, chatId int64) int {
 	return deleted
 }
 
-func (c *SlotMessageCache) SaveToFile(path string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *SlotMessageCache) Stop() {
+	close(c.stopCleanup)
+}
 
-	data, err := json.Marshal(c.cache)
+func (c *SlotMessageCache) SaveToFile(path string) error {
+	// Create snapshot with copy-on-write
+	snapshot := make(map[int64][]SlotMessage)
+
+	c.chats.Range(func(key, value interface{}) bool {
+		chatId := key.(int64)
+		data := value.(*chatData)
+
+		data.mu.Lock()
+		// Deep copy messages
+		if len(data.messages) > 0 {
+			messagesCopy := make([]SlotMessage, len(data.messages))
+			copy(messagesCopy, data.messages)
+			snapshot[chatId] = messagesCopy
+		}
+		data.mu.Unlock()
+
+		return true
+	})
+
+	// Marshal and write without holding any locks
+	jsonData, err := json.Marshal(snapshot)
 	if err != nil {
 		return err
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, jsonData, 0644); err != nil {
 		return err
 	}
 
@@ -143,9 +199,10 @@ func (c *SlotMessageCache) LoadFromFile(path string) error {
 	}
 
 	now := time.Now().Unix()
-	cutoff := now - c.ttl
+	cutoff := now - int64(c.ttl.Seconds())
 
-	for chatID, messages := range data {
+	// Filter expired messages and store into sync.Map
+	for chatId, messages := range data {
 		n := 0
 		for _, m := range messages {
 			if m.Timestamp >= cutoff {
@@ -153,16 +210,27 @@ func (c *SlotMessageCache) LoadFromFile(path string) error {
 				n++
 			}
 		}
-		if n == 0 {
-			delete(data, chatID)
-		} else {
-			data[chatID] = messages[:n]
+
+		if n > 0 {
+			c.chats.Store(chatId, &chatData{
+				messages: messages[:n],
+			})
 		}
 	}
 
-	c.mu.Lock()
-	c.cache = data
-	c.mu.Unlock()
-
 	return nil
+}
+
+// CountMessages returns the number of messages for a chat (for testing)
+func (c *SlotMessageCache) CountMessages(chatId int64) int {
+	val, ok := c.chats.Load(chatId)
+	if !ok {
+		return 0
+	}
+
+	data := val.(*chatData)
+	data.mu.Lock()
+	defer data.mu.Unlock()
+
+	return len(data.messages)
 }

@@ -81,6 +81,7 @@ func main() {
 	updater.Idle()
 
 	log.Println("shutting down, saving slot cache...")
+	slotMessageCache.Stop()
 	if err := slotMessageCache.SaveToFile("slot_cache.json"); err != nil {
 		log.Println("failed to save slot cache:", err)
 	}
