@@ -76,7 +76,7 @@ func (s *StatsService) buildStatsMessage(chatId int64, view string, page int) (s
 		title = "🧙 Боржники"
 	case "lucky":
 		stats, err = s.statsRepo.GetLuckyStats(chatId)
-		title = "🍀 Удачливі"
+		title = "🍀 Везунчики"
 	case "streaks":
 		stats, err = s.statsRepo.GetStreakStats(chatId)
 		title = "🔥 Серії"
@@ -142,7 +142,7 @@ func buildStatsKeyboard(activeView string, page, totalPages int) gotgbot.InlineK
 		label string
 	}{
 		{{"rich", "Багатії"}, {"debtors", "Боржники"}},
-		{{"lucky", "Удачливі"}, {"streaks", "Серії"}},
+		{{"lucky", "Везунчики"}, {"streaks", "Серії"}},
 	}
 
 	var rows [][]gotgbot.InlineKeyboardButton

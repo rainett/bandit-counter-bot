@@ -22,7 +22,7 @@ func (s *ResetService) HandleResetCommand(b *gotgbot.Bot, ctx *ext.Context) erro
 	userId := ctx.EffectiveMessage.From.Id
 
 	if !s.auth.CanPerform(b, chatId, userId, "reset") {
-		_, _ = ctx.EffectiveMessage.Reply(b, "У тебе немає доступу до скидання статистики", &gotgbot.SendMessageOpts{})
+		_, _ = ctx.EffectiveMessage.Reply(b, "а фіг тобі", &gotgbot.SendMessageOpts{})
 		return nil
 	}
 
@@ -47,7 +47,7 @@ func (s *ResetService) HandleResetCallback(b *gotgbot.Bot, ctx *ext.Context) err
 
 	if !s.auth.CanPerform(b, chatId, userId, "reset") {
 		cb.Answer(b, &gotgbot.AnswerCallbackQueryOpts{
-			Text: "У тебе немає доступу до скидання статистики",
+			Text: "потерпиш",
 		})
 		return nil
 	}
@@ -64,8 +64,8 @@ func (s *ResetService) HandleResetCallback(b *gotgbot.Bot, ctx *ext.Context) err
 		keyboard := gotgbot.InlineKeyboardMarkup{
 			InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 				{
-					{Text: "Впевнений", CallbackData: "reset:step3"},
-					{Text: "Та ні", CallbackData: "reset:cancel"},
+					{Text: "Вйо", CallbackData: "reset:step3"},
+					{Text: "Нєє", CallbackData: "reset:cancel"},
 				},
 			},
 		}
@@ -77,12 +77,12 @@ func (s *ResetService) HandleResetCallback(b *gotgbot.Bot, ctx *ext.Context) err
 		keyboard := gotgbot.InlineKeyboardMarkup{
 			InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 				{
-					{Text: "🔥 ЗРОБИТИ ЦЕ 🔥", CallbackData: "reset:confirm"},
-					{Text: "Я передумав", CallbackData: "reset:cancel"},
+					{Text: "Погнали", CallbackData: "reset:confirm"},
+					{Text: "Я манав", CallbackData: "reset:cancel"},
 				},
 			},
 		}
-		cb.Message.EditText(b, "🚨🚨🚨 ОСТАННІЙ ШАНС! Назад дороги нема!", &gotgbot.EditMessageTextOpts{
+		cb.Message.EditText(b, "🚨🚨🚨 ШЕ РАЗ ПИТАЮ І ВСЬО", &gotgbot.EditMessageTextOpts{
 			ReplyMarkup: keyboard,
 		})
 
@@ -91,10 +91,10 @@ func (s *ResetService) HandleResetCallback(b *gotgbot.Bot, ctx *ext.Context) err
 			cb.Answer(b, nil)
 			return err
 		}
-		cb.Message.EditText(b, "💥 Статистику стерто з лиця землі. Починаємо з нуля!", &gotgbot.EditMessageTextOpts{})
+		cb.Message.EditText(b, "💥 пацани, не знаю вашє хто ви", &gotgbot.EditMessageTextOpts{})
 
 	case "cancel":
-		cb.Message.EditText(b, "❌ Скинення скасовано. Фух!", &gotgbot.EditMessageTextOpts{})
+		cb.Message.EditText(b, "❌ отмінет", &gotgbot.EditMessageTextOpts{})
 	}
 
 	cb.Answer(b, nil)

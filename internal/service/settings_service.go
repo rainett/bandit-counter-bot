@@ -62,7 +62,7 @@ func (s *SettingsService) HandleSettingsCallback(b *gotgbot.Bot, ctx *ext.Contex
 	case "prize", "amount":
 		if !s.auth.CanPerform(b, chatId, userId, "settings") {
 			cb.Answer(b, &gotgbot.AnswerCallbackQueryOpts{
-				Text: "У тебе немає доступу до налаштувань",
+				Text: "нізя тобі таке клацать",
 			})
 			return nil
 		}
