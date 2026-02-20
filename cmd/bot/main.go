@@ -49,6 +49,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Start background tasks for automatic cleanup and reporting
+	slotMessageCache.StartBackgroundTasks(b)
+
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		Error: func(b *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
 			log.Println("an error occurred while handling update:", err.Error())
