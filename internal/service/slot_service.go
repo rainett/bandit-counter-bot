@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bandit-counter-bot/internal/cache"
 	"bandit-counter-bot/internal/repository"
 	"database/sql"
 	"errors"
@@ -14,11 +15,12 @@ import (
 type SlotService struct {
 	statsRepo    *repository.UserStatsRepo
 	settingsRepo *repository.SettingsRepo
-	messageCache *SlotMessageCache
+	messageCache *cache.SlotMessageCache
+	cleaner      *MessageCleaner
 }
 
-func NewSlotService(userRepo *repository.UserStatsRepo, settingsRepo *repository.SettingsRepo, messageCache *SlotMessageCache) *SlotService {
-	return &SlotService{statsRepo: userRepo, settingsRepo: settingsRepo, messageCache: messageCache}
+func NewSlotService(userRepo *repository.UserStatsRepo, settingsRepo *repository.SettingsRepo, messageCache *cache.SlotMessageCache, cleaner *MessageCleaner) *SlotService {
+	return &SlotService{statsRepo: userRepo, settingsRepo: settingsRepo, messageCache: messageCache, cleaner: cleaner}
 }
 
 func (s *SlotService) HandleSlot(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -81,12 +83,13 @@ func (s *SlotService) HandleMeCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 func (s *SlotService) HandleCleanCommand(b *gotgbot.Bot, ctx *ext.Context) error {
-	cleanedMessagesCount := s.messageCache.CleanForChatId(b, ctx.Message.Chat.Id)
-	var text = "нема шо чистити"
-	if cleanedMessagesCount != 0 {
-		text = fmt.Sprintf("🧹Очищено повідомлень: %d", cleanedMessagesCount)
+	chatId := ctx.EffectiveMessage.Chat.Id
+	result := s.cleaner.CleanChat(b, chatId)
+	text := "нема шо чистити"
+	if result.Deleted > 0 {
+		text = fmt.Sprintf("🧹 Очищено повідомлень: %d", result.Deleted)
 	}
-	ctx.EffectiveMessage.Reply(b, text, &gotgbot.SendMessageOpts{})
+	_, _ = ctx.EffectiveMessage.Reply(b, text, &gotgbot.SendMessageOpts{})
 	return nil
 }
 
