@@ -144,6 +144,18 @@ func (c *SlotMessageCache) GetDailyStats(chatId int64) (totalDeleted, totalError
 	return totalDeleted, totalErrors, cycleCount
 }
 
+// ClearDailyStats resets the cleanup history for a chat after daily report
+func (c *SlotMessageCache) ClearDailyStats(chatId int64) {
+	val, ok := c.chats.Load(chatId)
+	if !ok {
+		return
+	}
+	data := val.(*chatData)
+	data.statsMu.Lock()
+	defer data.statsMu.Unlock()
+	data.cleanupHistory = make([]CleanupStats, 0, 48)
+}
+
 // IterateChats calls fn for each chat. If fn returns false, iteration stops.
 func (c *SlotMessageCache) IterateChats(fn func(chatId int64) bool) {
 	c.chats.Range(func(key, value interface{}) bool {
@@ -215,9 +227,13 @@ func (c *SlotMessageCache) LoadFromFile(path string) error {
 			if err != nil {
 				continue
 			}
+			history := snap.CleanupHistory[k]
+			if history == nil {
+				history = make([]CleanupStats, 0, 48)
+			}
 			c.chats.Store(id, &chatData{
 				messages:       msgs,
-				cleanupHistory: snap.CleanupHistory[k],
+				cleanupHistory: history,
 			})
 		}
 		return nil

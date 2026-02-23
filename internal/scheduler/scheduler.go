@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"log"
-	"strconv"
 	"sync"
 	"time"
 
@@ -105,6 +104,10 @@ func (s *Scheduler) runCleanup() {
 			ErrorsCount:     result.Failed,
 		})
 
+		if result.Failed > 0 {
+			log.Printf("cleanup for chat %d: deleted %d, failed %d", chatId, result.Deleted, result.Failed)
+		}
+
 		return true
 	})
 }
@@ -123,6 +126,8 @@ func (s *Scheduler) runDailyReports() {
 		if err != nil {
 			log.Printf("failed to send daily report to chat %d: %v", chatId, err)
 		}
+
+		s.cache.ClearDailyStats(chatId)
 
 		return true
 	})
@@ -164,7 +169,7 @@ func intToString(n int) string {
 	}
 	s := ""
 	for n > 0 {
-		s = strconv.Itoa('0'+n%10) + s
+		s = string(rune('0'+n%10)) + s
 		n /= 10
 	}
 	return s
